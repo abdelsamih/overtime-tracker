@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overtime Tracker</title>
+<style>
+  :root {
+    --bg:#0f1115; --card:#1a1d24; --border:#2a2f3a; --fg:#e8eaed; --muted:#9aa0a6;
+    --accent:#f5c542; --green:#34c759; --red:#ff453a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:24px}
+  h1{font-size:22px;margin-bottom:4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.6px}
+  .val{font-size:26px;font-weight:700;margin-top:6px}
+  .status{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .on{background:rgba(52,199,89,.15);color:var(--green)}
+  .off{background:rgba(255,69,58,.15);color:var(--red)}
+  .btns{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+  button{padding:14px 22px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .05s}
+  button:active{transform:scale(.97)}
+  .start{background:var(--green);color:#000}
+  .end{background:var(--red);color:#fff}
+  .reset{background:var(--border);color:var(--fg)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:10px 8px;text-align:left;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-size:12px;text-transform:uppercase}
+  .right{text-align:right}
+  .empty{color:var(--muted);text-align:center;padding:20px}
+</style>
+</head>
+<body>
+  <h1>Overtime Tracker</h1>
+  <div class="sub">Counts hours worked past 5:30 PM. Data saved in browser.</div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Status</div><div class="val" id="status">Off</div></div>
+    <div class="card"><div class="label">Today's Overtime</div><div class="val" id="today">0.00 h</div></div>
+    <div class="card"><div class="label">Total Owed</div><div class="val" id="total">0.00 h</div></div>
+    <div class="card"><div class="label">Sessions</div><div class="val" id="count">0</div></div>
+  </div>
+
+  <div class="btns">
+    <button class="start" onclick="start()">Start Overtime</button>
+    <button class="end" onclick="end()">Work Ended</button>
+    <button class="reset" onclick="resetAll()">Reset All</button>
+  </div>
+
+  <div class="card">
+    <div class="label" style="margin-bottom:10px">History</div>
+    <table id="table">
+      <thead><tr><th>Date</th><th>Start</th><th>End</th><th class="right">Hours</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="empty" id="empty">No sessions yet.</div>
+  </div>
+
+<script>
+const KEY='ot_sessions', RUNKEY='ot_running';
+let running = JSON.parse(localStorage.getItem(RUNKEY)||'null');
+let sessions = JSON.parse(localStorage.getItem(KEY)||'[]');
+
+function save(){localStorage.setItem(KEY,JSON.stringify(sessions));localStorage.setItem(RUNKEY,JSON.stringify(running));}
+
+function fmt(t){return new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function fmtDate(t){return new Date(t).toLocaleDateString();}
+function hours(a,b){return (b-a)/3600000;}
+
+function todayOvertime(){
+  const today=new Date().toDateString();
+  let h=0;
+  sessions.filter(s=>new Date(s.start).toDateString()===today).forEach(s=>{h+=s.end?hours(s.start,s.end):0;});
+  if(running && new Date(running).toDateString()===today){h+=hours(running,Date.now());}
+  return h;
+}
+function totalOwed(){
+  let h=0;
+  sessions.forEach(s=>{if(s.end)h+=hours(s.start,s.end);});
+  if(running)h+=hours(running,Date.now());
+  return h;
+}
+
+function render(){
+  document.getElementById('status').innerHTML = running?'<span class="status on">Running</span>':'<span class="status off">Stopped</span>';
+  document.getElementById('today').textContent = todayOvertime().toFixed(2)+' h';
+  document.getElementById('total').textContent = totalOwed().toFixed(2)+' h';
+  document.getElementById('count').textContent = sessions.length + (running?1:0);
+  const tb=document.querySelector('#table tbody');
+  tb.innerHTML='';
+  const rows=[...sessions];
+  if(running) rows.push({start:running,end:null});
+  rows.sort((a,b)=>b.start-a.start);
+  rows.forEach(s=>{
+    const tr=document.createElement('tr');
+    const hrs = s.end?hours(s.start,s.end):hours(s.start,Date.now());
+    tr.innerHTML=`<td>${fmtDate(s.start)}</td><td>${fmt(s.start)}</td><td>${s.end?fmt(s.end):'—'}</td><td class="right">${hrs.toFixed(2)}</td>`;
+    tb.appendChild(tr);
+  });
+  document.getElementById('empty').style.display = rows.length?'none':'block';
+}
+
+function start(){
+  if(running){alert('Already running.');return;}
+  running=Date.now();
+  save();render();
+}
+function end(){
+  if(!running){alert('Not running.');return;}
+  sessions.push({start:running,end:Date.now()});
+  running=null;
+  save();render();
+}
+function resetAll(){
+  if(!confirm('Clear all sessions?'))return;
+  sessions=[];running=null;save();render();
+}
+
+// live tick
+setInterval(render,1000);
+render();
+</script>
+</body>
+</html>
